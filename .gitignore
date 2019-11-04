@@ -90,3 +90,5 @@ ENV/
 
 requirements.in
 mypythonfile.py
+
+data/wikiDoc2Vec.model*

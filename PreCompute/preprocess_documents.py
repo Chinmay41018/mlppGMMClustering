@@ -66,7 +66,7 @@ def tokenize(text):
     tokens = [w for w in tokens if len(w) >= 2]
     tokens = [fixup(x) for x in tokens]
     # stem
-    tokens = stem_tokens(tokens, stemmer)
+    # tokens = stem_tokens(tokens, stemmer)
     return tokens
 
 
