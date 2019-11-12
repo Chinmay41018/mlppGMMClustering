@@ -9,6 +9,7 @@ import inflect
 from nltk.corpus import stopwords
 import unicodedata
 import contractions as c
+from collections import Counter
 nltk.download('punkt')
 
 
@@ -130,16 +131,21 @@ def contract(sent):
     return ans.strip()
 
 
-def normalize(words):
-    words = [fixup(x) for x in words]
-    words = to_lowercase(words)
-    words = remove_non_ascii(words)
-    words = [contract(x) for x in words]
-    words = remove_punctuation(words)
-    words = replace_numbers(words)
-    words = remove_stopwords(words)
-    words = [tokenize(x) for x in words]
-    return words
+def normalize(docs):
+    docs = [fixup(x) for x in docs]
+    docs = to_lowercase(docs)
+    docs = remove_non_ascii(docs)
+    docs = [contract(x) for x in docs]
+    docs = remove_punctuation(docs)
+    docs = replace_numbers(docs)
+    docs = remove_stopwords(docs)
+    docs = [tokenize(x) for x in docs]
+    sent = []
+    for each in docs:
+        sent = sent + each
+    counter = Counter(sent)
+    docs = [[x for x in doc if counter[x] >= 3] for doc in docs]
+    return docs
 
 
 stemmer = PorterStemmer()
