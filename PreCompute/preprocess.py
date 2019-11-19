@@ -146,6 +146,7 @@ def normalize(docs):
     counter = Counter(sent)
     vocab = set(np.array(sorted(counter.items(),
                 key=operator.itemgetter(1), reverse=True)[:10000])[:, 0])
+    print('modernday' in vocab)
     print("Vocab created.")
     docs = [[x for x in doc if x in vocab] for doc in docs]
     return docs
