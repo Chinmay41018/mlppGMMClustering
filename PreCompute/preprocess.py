@@ -15,6 +15,7 @@ import sys
 import zipfile
 import os
 
+
 def create_dataframe_imdb(file='../data/IMDB_Dataset.csv'):
     return pd.read_csv(file, names=['text', 'labels'], header=0)
 
@@ -170,4 +171,3 @@ def clean_data(typ):
 
 if __name__ == "__main__":
     clean_data(sys.argv[1])
-
