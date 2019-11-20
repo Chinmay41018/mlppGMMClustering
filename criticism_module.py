@@ -23,7 +23,6 @@ en = {'business': 0,
 
 def tsne_plot(emb, labels, color_map=color_map, n_comp=2):
     low_emb = TSNE(n_components=2).fit_transform(emb)
-    fig = plt.figure()
     plt.scatter(
         low_emb[:, 0], low_emb[:, 1], c=[color_map[y] for y in labels])
     plt.show()
@@ -37,7 +36,8 @@ def criticise(path_to_d):
         names=['text', 'embedding', 'label']).label
     encoded_label = [en[y] for y in labels]
     model = LogisticRegression()
-    cv_score = cross_validate(model, np.array([x.data.numpy() for x in dat]), encoded_label, cv=3)
+    cv_score = cross_validate(model, np.array([x.data.numpy() for x in dat]),
+                              encoded_label, cv=3)
     print("Classification performance : ", np.mean(cv_score['test_score']))
     return np.array([x.data.numpy() for x in dat]), encoded_label
 
