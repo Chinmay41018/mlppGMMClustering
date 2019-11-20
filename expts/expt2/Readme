@@ -1,0 +1,2 @@
+1. Removed d_i in learning step , learning only U, V
+2. Autodelta for di

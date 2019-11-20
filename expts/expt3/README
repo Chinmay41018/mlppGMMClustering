@@ -1,0 +1,3 @@
+U -> Word2Vec Wikipedia model
+V -> Trained using fixed U
+di -> SVI (AutoDelta)

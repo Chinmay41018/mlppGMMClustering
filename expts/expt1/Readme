@@ -1,0 +1,5 @@
+U, V self 
+AutoDelta
+
+BPV classification performance : 
+ {'fit_time': array([0.08114505, 0.0805409 , 0.06480002]), 'score_time': array([0.001508  , 0.0015111 , 0.00179505]), 'test_score': array([0.25302826, 0.25067385, 0.24864865])}

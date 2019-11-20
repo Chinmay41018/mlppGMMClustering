@@ -1,0 +1,7 @@
+U -> Word2Vec Wikipedia
+V -> Word2Vec Wikipedia (=U)
+di -> SVI(AutoDelta)
+
+
+BPV classification performance : 
+ {'fit_time': array([0.18484616, 0.14360976, 0.10054708]), 'score_time': array([0.00372481, 0.00152397, 0.00136614]), 'test_score': array([0.90174966, 0.87061995, 0.86891892])}
