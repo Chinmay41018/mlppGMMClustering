@@ -14,6 +14,7 @@ import numpy as np
 import sys
 import zipfile
 import os
+nltk.download("punkt")
 
 
 def create_dataframe_imdb(file='../data/IMDB_Dataset.csv'):
@@ -147,7 +148,6 @@ def normalize(docs):
     counter = Counter(sent)
     vocab = set(np.array(sorted(counter.items(),
                 key=operator.itemgetter(1), reverse=True)[:10000])[:, 0])
-    print('modernday' in vocab)
     print("Vocab created.")
     docs = [[x for x in doc if x in vocab] for doc in docs]
     return docs
@@ -170,4 +170,7 @@ def clean_data(typ):
 
 
 if __name__ == "__main__":
-    clean_data(sys.argv[1])
+    if len(sys.argv) > 1:
+        clean_data(sys.argv[1])
+    else:
+        clean_data("bbc")
