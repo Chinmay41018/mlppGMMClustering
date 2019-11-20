@@ -6,6 +6,7 @@ from collections import Counter
 
 import pandas as pd
 import numpy as np
+import gensim.downloader as api
 import matplotlib.pyplot as plt
 
 import torch
@@ -86,48 +87,83 @@ def get_loss(U, V, d_i, X_plus, X_neg):
     return t1 + t2 + t3 + t4
 
 
-def learn_UV(x_plus, x_neg):
+def get_loss_no_di(U, V, X_plus, X_neg):
+    t1 = -torch.sum(
+        -torch.log(
+            1+torch.exp(
+                -torch.bmm(
+                    U[X_plus[:, 0]].view(U[X_plus[:, 0]].shape[0], 1, E),
+                    (V[X_plus[:, 1]]).view(
+                        (V[X_plus[:, 1]]).shape[0], E, 1)))))
+    - torch.sum(
+        -torch.log(
+            1+torch.exp(
+                -torch.bmm(
+                    -U[X_neg[:, 0]].view(U[X_neg[:, 0]].shape[0], 1, E),
+                    (V[X_neg[:, 1]]).view(
+                        (V[X_neg[:, 1]]).shape[0], E, 1)))))
+    t2 = - torch.sum(U_model.log_prob(U))
+    t3 = - torch.sum(V_model.log_prob(V))
+    return t1 + t2 + t3
+
+
+def learn_UV(x_plus, x_neg, expt=0, U_val=None):
     alpha = 0.99996
     n_iter = 100
     loss = []
-    U = U_model.rsample()
-    if is_cuda:
-        U = U.cuda()
+    if expt != 3:
+        U = U_model.rsample()
+        if is_cuda:
+            U = U.cuda()
+        U.requires_grad = True
+    else:
+        U = U_val
     V = V_model.rsample()
     if is_cuda:
         V = V.cuda()
-    U.requires_grad = True
     V.requires_grad = True
-    optimizer = torch.optim.Adam([V], lr=0.01)
+    if expt != 3:
+        optimizer = torch.optim.Adam([U, V], lr=0.01)
+    else:
+        optimizer = torch.optim.Adam([V], lr=0.01)
     len_ = len(x_plus)
     for it in range(1):
         for n in range(len_):
             for g in optimizer.param_groups:
                 g['lr'] *= alpha
-            if is_cuda:
-                d_i = di_model.rsample()
-                d_i = d_i.to(device)
-                d_i.requires_grad = True
-                d_i.cuda = True
-            else:
-                d_i = Variable(di_model.rsample(), requires_grad=True)
-            opti = torch.optim.Adam([d_i], lr=1)
+            if expt != 2:
+                # Learning of d_i
+                if is_cuda:
+                    d_i = di_model.rsample()
+                    d_i = d_i.to(device)
+                    d_i.requires_grad = True
+                    d_i.cuda = True
+                else:
+                    d_i = Variable(di_model.rsample(), requires_grad=True)
+                opti = torch.optim.Adam([d_i], lr=1)
+                X_plus = torch.tensor(x_plus[n])
+                X_neg = torch.tensor(x_neg[n])
+                # SGD for d_i
+                for iterat in range(n_iter):
+                    # Loss function
+                    opti.zero_grad()
+                    logProb = get_loss(U, V, d_i, X_plus, X_neg)
+                    logProb.backward()
+                    opti.step()
+                # End learning of d_i.
             X_plus = torch.tensor(x_plus[n])
             X_neg = torch.tensor(x_neg[n])
-            # SGD for d_i
-            for iterat in range(n_iter):
-                # Loss function
-                opti.zero_grad()
-                logProb = get_loss(U, V, d_i, X_plus, X_neg)
-                logProb.backward()
-                opti.step()
+
             optimizer.zero_grad()
-            log_loss = get_loss(U, V, d_i, X_plus, X_neg)
+            if expt != 2:
+                log_loss = get_loss(U, V, d_i, X_plus, X_neg)
+            else:
+                log_loss = get_loss_no_di(U, V, X_plus, X_neg)
             log_loss.backward()
             optimizer.step()
             loss.append(log_loss)
             if n % 100 == 0:
-                print("Iteration : {}, logProb : {}".format(n+1, logProb))
+                print("Iteration : {}, log_loss : {}".format(n+1, log_loss))
     return U, V
 
 
@@ -206,22 +242,23 @@ neg_samples = 2*c
 # Check if cuda enabled
 is_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-if sys.argv is not None and sys.argv[1]:
-    dat_file = 'cleaned_documents_imdb.csv'
-    postfix = '_imdb'
-else:
-    dat_file = 'cleaned_documents.csv'
-    postfix = ''
-
 # Reading  dataset
+dat_file = './data/cleaned_documents.csv'
 dat = pd.read_csv(dat_file, converters={"text": ast.literal_eval})
 print("Read cleaned doc, size = ", len(dat))
 
 
 #  Build vocabulary
+# If experiment 3 or 4 then partial vocabulary.
+if len(sys.argv) > 1 and sys.argv[1] in ['3', '4']:
+    gen_model = api.load('glove-wiki-gigaword-100')
+
 E = 100  # size of embedding
 words = list(itertools.chain.from_iterable(dat.text))
+
+if len(sys.argv) > 1 and sys.argv[1] in ['3', '4']:
+    words = [x for x in words if x in gen_model]
+
 uni_freq = Counter(words)
 words = set(words)
 word2idx = {word: idx for idx, word in enumerate(words)}
@@ -236,39 +273,69 @@ for each in uni_freq:
     uni_freq[each] = uni_freq[each]/deno
 print("Unigram Frequencies obtained.")
 
-
 # Build neg and pos samples.
-try:
-    x_plus = pickle.load('x_plus' + postfix)
-    x_neg = pickle.load('x_neg' + postfix)
-    print("loaded pre-saved")
-except Exception:
+if len(sys.argv) > 1:
     x_plus, x_neg = get_pos_neg_sample(dat)
     print("Computed")
-    filehandler = open('x_plus' + postfix, 'wb')
+    filehandler = open('x_plus', 'wb')
     pickle.dump(x_plus, filehandler)
 
-    filehandler = open('x_neg' + postfix, 'wb')
+    filehandler = open('x_neg', 'wb')
     pickle.dump(x_neg, filehandler)
     print("Saved for future")
+else:
+    try:
+        x_plus = pickle.load('x_plus')
+        x_neg = pickle.load('x_neg')
+        print("loaded pre-saved")
+    except Exception:
+        x_plus, x_neg = get_pos_neg_sample(dat)
+        print("Computed")
+        filehandler = open('x_plus', 'wb')
+        pickle.dump(x_plus, filehandler)
 
+        filehandler = open('x_neg', 'wb')
+        pickle.dump(x_neg, filehandler)
+        print("Saved for future")
 
 # Get model definitions.
 U_model, V_model, di_model = get_models()
 
 
-# Learning U and V.
-print("Lets learn U, V!")
-try:
-    U = torch.load('u' + postfix)
-    V = torch.load('v' + postfix)
-    print("Loaded U and V.")
-except Exception:
-    U, V = learn_UV(x_plus, x_neg)
-    print("Computed U,V")
-    torch.save(U, 'u')
-    torch.save(V, 'v')
-    print("Saved U,V")
+if len(sys.argv) > 1 and sys.argv[1] in ['3', '4']:
+    U = torch.tensor(
+        [gen_model.get_vector(word)
+         if word in gen_model else [0]*300 for word in words])
+    if is_cuda:
+        U = U.cuda()
+    if sys.argv[1] == '4':
+        V = U
+    else:
+        U, V = learn_UV(x_plus, x_neg, 3, U)
+
+else:
+    # Learning U and V.
+    print("Lets learn U, V!")
+    if len(sys.argv) > 1:
+        if len(sys.argv) > 1 and sys.argv[1] == '2':
+            U, V = learn_UV(x_plus, x_neg, 2)
+        else:
+            U, V = learn_UV(x_plus, x_neg)
+        print("Computed U,V")
+        torch.save(U, 'u')
+        torch.save(V, 'v')
+        print("Saved U,V")
+    else:
+        try:
+            U = torch.load('u')
+            V = torch.load('v')
+            print("Loaded U and V.")
+        except Exception:
+            U, V = learn_UV(x_plus, x_neg)
+            print("Computed U,V")
+            torch.save(U, 'u')
+            torch.save(V, 'v')
+            print("Saved U,V")
 
 
 # Learning doc vectors.
@@ -276,7 +343,7 @@ print("Learning d_i.")
 dis, trainingLosses = train(x_plus, x_neg, U, V)
 print("Finished learning d_i.")
 
-torch.save(dis, 'di' + postfix)
+torch.save(dis, 'di')
 
 # Training loss for learning of document vectors.
 n_data = len(trainingLosses[0])
